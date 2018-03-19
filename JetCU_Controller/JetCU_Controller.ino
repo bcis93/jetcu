@@ -156,50 +156,64 @@ void loop() {
 }
 
 String handle_command(String command){
+  //Serial.println("handle_command");
   // handle commands here
-  String commandType = command.substring(0,3);
-  if (commandType == "SMD"){
-    int requestedDutyCycle = command.substring(3).toInt();
-    String response = setStarterMotorDutyCycle(requestedDutyCycle);
-    return response;
+  String response = "";
+  while (command.length() > 1){
+    command.trim();
+    //Serial.println("command 2: " + command);
+    String commandType = command.substring(0,3);
+    //Serial.println("command type: " + commandType);
+    if (commandType == "SMD"){
+      int requestedDutyCycle = command.substring(3,5).toInt();
+      response += setStarterMotorDutyCycle(requestedDutyCycle) + "\n";
+      command = command.substring(5);
+    }
+    else if (commandType == "GPD"){
+      int requestedDutyCycle = command.substring(3,5).toInt();
+      response += setGlowPlugDutyCycle(requestedDutyCycle) + "\n";
+      command = command.substring(5);
+    }
+    else if (commandType == "END"){
+      fuelPump(0);
+      setStarterMotorDutyCycle(0);
+      setGlowPlugDutyCycle(0);
+      burnerValve(0);
+      fuelValve(0);
+      response += "end\n";
+      command = "";
+    }
+    else if (commandType == "RQT"){
+      int temp = requestTemperature();
+      response += ("rqt" + String(temp)) + "\n";
+      command = command.substring(3);
+    }
+    else if (commandType == "RQR"){
+      long rpm = requestRPM();
+      response += ("rqr" + String(rpm)) + "\n";
+      command = command.substring(3);
+    }
+    else if (commandType == "FVP"){
+      int requestedPercent = command.substring(3,5).toInt();
+      response += fuelValve(requestedPercent) + "\n";
+      command = command.substring(5);
+    }
+    else if (commandType == "BVP"){
+      int requestedPercent = command.substring(3,5).toInt();
+      response += burnerValve(requestedPercent) + "\n";
+      command = command.substring(5);
+    }
+    else if (commandType == "FPM"){
+      int requestedPhase = command.substring(3,5).toInt();
+      response += fuelPump(requestedPhase) + "\n";
+      command = command.substring(5);
+    }
+    else {
+      response += "inv\n";
+      command = "";
+    }
   }
-  else if (commandType == "GPD"){
-    int requestedDutyCycle = command.substring(3).toInt();
-    String response = setGlowPlugDutyCycle(requestedDutyCycle);
-    return response;
-  }
-  else if (commandType == "END"){
-    String tmp = setStarterMotorDutyCycle(0);
-    tmp = setGlowPlugDutyCycle(0);
-    tmp = burnerValve(0);
-    tmp = fuelValve(0);
-    tmp = fuelPump(0);
-    return "end";
-  }
-  else if (commandType == "RQT"){
-    int temp = requestTemperature();
-    return "rqt" + String(temp);
-  }
-  else if (commandType == "RQR"){
-    long rpm = requestRPM();
-    return "rqr" + String(rpm);
-  }
-  else if (commandType == "FVP"){
-    int requestedPercent = command.substring(3).toInt();
-    String response = fuelValve(requestedPercent);
-    return response;
-  }
-  else if (commandType == "BVP"){
-    int requestedPercent = command.substring(3).toInt();
-    String response = burnerValve(requestedPercent);
-    return response;
-  }
-  else if (commandType == "FPM"){
-    int requestedPhase = command.substring(3).toInt();
-    String response = fuelPump(requestedPhase);
-    return response;
-  }
-  else return "inv";
+  return response;
 }
 
 String setStarterMotorDutyCycle(int dutyCycle){
