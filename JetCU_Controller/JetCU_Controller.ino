@@ -17,6 +17,7 @@
 #define ENGINE_ADDRESS 0x01
 #define PUMP_ADDRESS 0x02
 
+
 //timer setup for timer0, timer1, and timer2.
 //For arduino uno or any board with ATMEL 328/168.. diecimila, duemilanove, lilypad, nano, mini...
 
@@ -40,7 +41,9 @@ int glowPlug_dutyCycle = 0;
 String incoming_command = "";
 
 //variable for fuel pump mode
-int fuelPumpMode = 0;
+//int fuelPumpMode = 0;
+int pumpvalue1=0;
+int pumpvalue2=0;
 bool fuelPumpFlag = false;
 
 //constants for testing
@@ -175,7 +178,7 @@ String handle_command(String command){
       command = command.substring(5);
     }
     else if (commandType == "END"){
-      fuelPump(0);
+      fuelPump(0,0);
       setStarterMotorDutyCycle(0);
       setGlowPlugDutyCycle(0);
       burnerValve(0);
@@ -204,9 +207,10 @@ String handle_command(String command){
       command = command.substring(5);
     }
     else if (commandType == "FPM"){
-      int requestedPhase = command.substring(3,5).toInt();
-      response += fuelPump(requestedPhase) + "\n";
-      command = command.substring(5);
+      int requestedPump1 = command.substring(3,6).toInt();
+      int requestedPump2 =  command.substring(7,10).toInt();
+      response += fuelPump(requestedPump1, requestedPump2) + "\n";
+      command = command.substring(10);
     }
     else {
       response += "inv\n";
@@ -294,37 +298,60 @@ String fuelValve(int percent){
   return "fvp" + String(percent);
 }
 
-String fuelPump(int input){
-  if (input == 0){ //turn off pump
-    fuelPumpMode = 0;
-    return "fpm0";
-  }
-  else if (input == 1){ //turn on phase 1
-    fuelPumpMode = 1;
-    return "fpm1";
-  }
-  else if (input == 2){ //turn on phase 2
-    fuelPumpMode = 2;
-    return "fpm2";
-  }
-  else return "inv";
+//String fuelPump(int input){
+//  if (input == 0){ //turn off pump
+//    fuelPumpMode = 0;
+//    return "fpm0";
+//  }
+//  else if (input == 1){ //turn on phase 1
+//    fuelPumpMode = 1;
+//    return "fpm1";
+//  }
+//  else if (input == 2){ //turn on phase 2
+//    fuelPumpMode = 2;
+//    return "fpm2";
+//  }
+//  else return "inv";
+//}
+
+String fuelPump(int input1, int input2){
+  pumpvalue1=input1;
+  pumpvalue2=input2;
+  return "fpm" + String(input1) + "," + String(input2);
 }
 
+//void fuelPumpControl(){
+//  //Serial.println("fuelPumpControl");
+//  if (fuelPumpMode == 1){
+//    Wire.beginTransmission(PUMP_ADDRESS);
+//    Wire.write(0x01);Wire.write(0x1c);Wire.write(0xA0);Wire.write(0x00);Wire.write(0x10);Wire.write(0x34);Wire.write(0x07);
+//    Wire.endTransmission();
+//  }
+//  else if (fuelPumpMode == 2){
+//    Wire.beginTransmission(PUMP_ADDRESS);
+//    Wire.write(0x01);Wire.write(0x1c);Wire.write(0xA0);Wire.write(0x00);Wire.write(0x15);Wire.write(0x2F);Wire.write(0x07);
+//    Wire.endTransmission();
+//  }
+//  else{
+//    Wire.beginTransmission(PUMP_ADDRESS);
+//    Wire.write(0x01);Wire.write(0x1c);Wire.write(0x00);Wire.write(0x00);Wire.write(0x00);Wire.write(0xe4);Wire.write(0x07);
+//    Wire.endTransmission();
+//  }
+//}
+
 void fuelPumpControl(){
-  //Serial.println("fuelPumpControl");
-  if (fuelPumpMode == 1){
+  //Serial.println("fuelPumpControl");  
+  byte pumpByte1 = pumpvalue1;
+  byte pumpByte2 = pumpvalue2;
+  //Serial.println(pumpByte1);
+  if (pumpvalue2<255){
     Wire.beginTransmission(PUMP_ADDRESS);
-    Wire.write(0x01);Wire.write(0x1c);Wire.write(0xA0);Wire.write(0x00);Wire.write(0x10);Wire.write(0x34);Wire.write(0x07);
-    Wire.endTransmission();
-  }
-  else if (fuelPumpMode == 2){
-    Wire.beginTransmission(PUMP_ADDRESS);
-    Wire.write(0x01);Wire.write(0x1c);Wire.write(0xA0);Wire.write(0x00);Wire.write(0x15);Wire.write(0x2F);Wire.write(0x07);
+    Wire.write(0x01);Wire.write(0x1c);Wire.write(pumpByte1);Wire.write(0x00);Wire.write(pumpByte2);Wire.write(228-pumpvalue1-pumpByte2);Wire.write(0x07);
     Wire.endTransmission();
   }
   else{
     Wire.beginTransmission(PUMP_ADDRESS);
-    Wire.write(0x01);Wire.write(0x1c);Wire.write(0x00);Wire.write(0x00);Wire.write(0x00);Wire.write(0xe4);Wire.write(0x07);
+    Wire.write(0x01);Wire.write(0x1c);Wire.write(pumpByte1);Wire.write(0x00);Wire.write(pumpByte2);Wire.write(484-pumpvalue1-pumpByte2);Wire.write(0x07);
     Wire.endTransmission();
   }
 }
