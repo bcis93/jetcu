@@ -13,7 +13,8 @@
 
 
 
-#include <Wire.h>
+//#include <Wire.h>
+#include <I2C.h>
 #define ENGINE_ADDRESS 0x01
 #define PUMP_ADDRESS 0x02
 
@@ -26,6 +27,10 @@
 //timer1 will interrupt at 532Hz
 //timer2 will interrupt at 40kHz
 
+//constants and variables for safety checks
+bool emergencyStopFlag = false;
+#define COMMUNICATION_TIMEOUT 500 //in milliseconds
+int communication_timeout_counter = 0;
 
 //constants and variables for starter motor
 #define STARTER_MOTOR_PIN 6
@@ -42,8 +47,8 @@ String incoming_command = "";
 
 //variable for fuel pump mode
 //int fuelPumpMode = 0;
-int pumpvalue1=0;
-int pumpvalue2=0;
+volatile int pumpvalue1=0;
+volatile int pumpvalue2=0;
 bool fuelPumpFlag = false;
 
 //constants for testing
@@ -63,8 +68,10 @@ void setup(){
   Serial.setTimeout(10); //sets the timeout of the serial read to 10ms
 
   //setup I2C communication
-  Wire.begin();
-  Wire.setClock(20000);
+//  Wire.begin();
+//  Wire.setClock(20000);
+  I2c.begin();
+  I2c.timeOut(100); //100 ms timeout
 }
 
 void init_interrupts(){
@@ -104,14 +111,21 @@ void init_interrupts(){
 }
 
 ISR(TIMER0_COMPA_vect){
-  static int counter = 0;
-  counter++;
-  if (counter >= 500){
+  static int fuel_pump_counter = 0;
+  fuel_pump_counter++;
+  communication_timeout_counter++;
+  if (fuel_pump_counter >= 500){
     fuelPumpFlag = true;
-    counter = 0;
+    fuel_pump_counter = 0;
   }
   else{
     fuelPumpFlag = false;
+  }
+  if (communication_timeout_counter > COMMUNICATION_TIMEOUT){
+    emergencyStopFlag = true;
+  }
+  else{
+    emergencyStopFlag = false;
   }
 }
 
@@ -147,15 +161,23 @@ ISR(TIMER2_COMPA_vect){//timer2 interrupt 40kHz for starter motor
 
 void loop() {
   // put your main code here, to run repeatedly:
-  if (Serial.available() > 0){
+//  if (emergencyStopFlag){
+//    //stop!!
+//  }
+//  else{
+
+    if (Serial.available() > 0){
     incoming_command = Serial.readString();
     String response = handle_command(incoming_command);
     Serial.println(response);
-  }
+    }
+  
+    if (fuelPumpFlag){
+      fuelPumpControl();
+    }
+    
+//  }
 
-  if (fuelPumpFlag){
-    fuelPumpControl();
-  }
 }
 
 String handle_command(String command){
@@ -163,61 +185,74 @@ String handle_command(String command){
   // handle commands here
   String response = "";
   while (command.length() > 1){
-    command.trim();
-    //Serial.println("command 2: " + command);
+    command.trim(); //removes extra whitespace before and after command
     String commandType = command.substring(0,3);
-    //Serial.println("command type: " + commandType);
     if (commandType == "SMD"){
       int requestedDutyCycle = command.substring(3,5).toInt();
       response += setStarterMotorDutyCycle(requestedDutyCycle) + "\n";
       command = command.substring(5);
+      communication_timeout_counter = 0;
     }
     else if (commandType == "GPD"){
       int requestedDutyCycle = command.substring(3,5).toInt();
       response += setGlowPlugDutyCycle(requestedDutyCycle) + "\n";
       command = command.substring(5);
+      communication_timeout_counter = 0;
     }
     else if (commandType == "END"){
-      fuelPump(0,0);
-      setStarterMotorDutyCycle(0);
-      setGlowPlugDutyCycle(0);
-      burnerValve(0);
-      fuelValve(0);
       response += "end\n";
-      command = "";
+      communication_timeout_counter = 0;
+      emergencyStop();
     }
     else if (commandType == "RQT"){
       int temp = requestTemperature();
-      response += ("rqt" + String(temp)) + "\n";
+      char tmp[5];
+      sprintf(tmp, "%04d", temp);
+      response += ("rqt" + String(tmp)) + "\n";
       command = command.substring(3);
+      communication_timeout_counter = 0;
     }
     else if (commandType == "RQR"){
       long rpm = requestRPM();
-      response += ("rqr" + String(rpm)) + "\n";
+      char tmp[7];
+      sprintf(tmp, "%06d",rpm);
+      response += ("rqr" + String(tmp)) + "\n";
       command = command.substring(3);
+      communication_timeout_counter = 0;
     }
     else if (commandType == "FVP"){
-      int requestedPercent = command.substring(3,5).toInt();
+      int requestedPercent = command.substring(3,6).toInt();
       response += fuelValve(requestedPercent) + "\n";
-      command = command.substring(5);
+      command = command.substring(6);
+      communication_timeout_counter = 0;
     }
     else if (commandType == "BVP"){
-      int requestedPercent = command.substring(3,5).toInt();
+      int requestedPercent = command.substring(3,6).toInt();
       response += burnerValve(requestedPercent) + "\n";
-      command = command.substring(5);
+      command = command.substring(6);
+      communication_timeout_counter = 0;
     }
     else if (commandType == "FPM"){
       int requestedPump1 = command.substring(3,6).toInt();
       int requestedPump2 =  command.substring(7,10).toInt();
       response += fuelPump(requestedPump1, requestedPump2) + "\n";
       command = command.substring(10);
+      communication_timeout_counter = 0;
     }
     else {
       response += "inv\n";
-      command = "";
+      command = command.substring(1);
     }
   }
   return response;
+}
+
+void emergencyStop(){
+  fuelPump(0,0);
+  setStarterMotorDutyCycle(0);
+  setGlowPlugDutyCycle(0);
+  burnerValve(0);
+  fuelValve(0);
 }
 
 String setStarterMotorDutyCycle(int dutyCycle){
@@ -241,60 +276,47 @@ String setGlowPlugDutyCycle(int dutyCycle){
 
 int requestTemperature(){
    //Prompt temperature
-  Wire.beginTransmission(ENGINE_ADDRESS);
-  Wire.write(0x0b);
-  Wire.endTransmission(false);
-  Wire.requestFrom(ENGINE_ADDRESS,3);
+  I2c.read(ENGINE_ADDRESS, 0x0b, 3);
+  int byte1 = I2c.receive();
+  int byte2 = I2c.receive();
+  int byte3 = I2c.receive();
   int temperature = 0;
-  while (Wire.available()) { 
-    int byte1 = Wire.read();
-    int byte2 = Wire.read();
-    int byte3 = Wire.read();
-    //Output temperature to serial
-    if (byte1+byte2+byte3==245){
-      temperature=byte1*1.0193+261*byte2-30.451;
-      //Serial.print(temperature);
-      //Serial.println("C");
-    }
+  if (byte1+byte2+byte3==245){
+    temperature=byte1*1.0193+261*byte2-30.451;
   }
-  Wire.endTransmission();
   return temperature;
 }
 
 long requestRPM(){
   //Prompt RPM
-  Wire.beginTransmission(ENGINE_ADDRESS);
-  Wire.write(0x08);
-  Wire.endTransmission(false);
-  Wire.requestFrom(ENGINE_ADDRESS,3);
+  I2c.read(ENGINE_ADDRESS, 0x08, 3);
+  int byte1 = I2c.receive();
+  int byte2 = I2c.receive();
+  int byte3 = I2c.receive();
   long rpm = 0;
-  while (Wire.available()) { 
-    int byte1 = Wire.read();
-    int byte2 = Wire.read();
-    int byte3 = Wire.read();
-    if (byte1+byte2+byte3==248){
-      rpm=5.025*byte1+1300*byte2-33.439;
-      //Serial.print(rpm);
-      //Serial.println(" RPM");
-    }
+  if (byte1+byte2+byte3==248){
+    rpm=5.025*byte1+1300*byte2-33.439;
   }
-  Wire.endTransmission();
   return rpm;
 }
 
 String burnerValve(int percent){
    //Turn on burner valve
-  Wire.beginTransmission(ENGINE_ADDRESS);
-  Wire.write(0x01);Wire.write(0x1f);Wire.write(percent);Wire.write(225-percent);
-  Wire.endTransmission();
+//  Wire.beginTransmission(ENGINE_ADDRESS);
+//  Wire.write(0x01);Wire.write(0x1f);Wire.write(percent);Wire.write(225-percent);
+//  Wire.endTransmission();
+  uint8_t data[3] = {0x1f, percent, 225-percent};
+  I2c.write(ENGINE_ADDRESS, ENGINE_ADDRESS, data, 3);
   return "bvp" + String(percent);
 }
 
 String fuelValve(int percent){
   //Turn on fuel valve
-  Wire.beginTransmission(ENGINE_ADDRESS);
-  Wire.write(0x01);Wire.write(0x1e);Wire.write(percent);Wire.write(226-percent);
-  Wire.endTransmission();
+//  Wire.beginTransmission(ENGINE_ADDRESS);
+//  Wire.write(0x01);Wire.write(0x1e);Wire.write(percent);Wire.write(226-percent);
+//  Wire.endTransmission();
+  uint8_t data[3] = {0x1e, percent, 226-percent};
+  I2c.write(ENGINE_ADDRESS, ENGINE_ADDRESS, data, 3);
   return "fvp" + String(percent);
 }
 
@@ -344,15 +366,26 @@ void fuelPumpControl(){
   byte pumpByte1 = pumpvalue1;
   byte pumpByte2 = pumpvalue2;
   //Serial.println(pumpByte1);
-  if (pumpvalue2<255){
-    Wire.beginTransmission(PUMP_ADDRESS);
-    Wire.write(0x01);Wire.write(0x1c);Wire.write(pumpByte1);Wire.write(0x00);Wire.write(pumpByte2);Wire.write(228-pumpvalue1-pumpByte2);Wire.write(0x07);
-    Wire.endTransmission();
-  }
-  else{
-    Wire.beginTransmission(PUMP_ADDRESS);
-    Wire.write(0x01);Wire.write(0x1c);Wire.write(pumpByte1);Wire.write(0x00);Wire.write(pumpByte2);Wire.write(484-pumpvalue1-pumpByte2);Wire.write(0x07);
-    Wire.endTransmission();
-  }
+
+  uint8_t data[5] = {0x1c, pumpByte1, 0x00, pumpByte2, 256 - ((0x1c+pumpByte1+pumpByte2) % 256)};
+  //delay(10);
+  I2c.write(PUMP_ADDRESS, 0x01, data, 5);
+  
+//  if (pumpvalue2<255){
+////    Wire.beginTransmission(PUMP_ADDRESS);
+////    Wire.write(0x01);Wire.write(0x1c);Wire.write(pumpByte1);Wire.write(0x00);Wire.write(pumpByte2);Wire.write(228-pumpvalue1-pumpByte2);Wire.write(0x07);
+////    Wire.endTransmission();
+//
+////    uint8_t data[6] = {0x1c, pumpByte1, 0x00, pumpByte2, 228-pumpByte1-pumpByte2, 0x07};
+////    I2c.write(PUMP_ADDRESS, 0x01, data, 6);
+//  }
+//  else{
+////    Wire.beginTransmission(PUMP_ADDRESS);
+////    Wire.write(0x01);Wire.write(0x1c);Wire.write(pumpByte1);Wire.write(0x00);Wire.write(pumpByte2);Wire.write(484-pumpvalue1-pumpByte2);Wire.write(0x07);
+////    Wire.endTransmission();
+//      
+////    uint8_t data[6] = {0x1c, pumpByte1, 0x00, pumpByte2, 484-pumpByte1-pumpByte2, 0x07};
+////    I2c.write(PUMP_ADDRESS, 0x01, data, 6);
+//  }
 }
 
