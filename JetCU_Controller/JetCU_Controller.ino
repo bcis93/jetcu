@@ -215,7 +215,7 @@ String handle_command(String command){
     else if (commandType == "RQR"){
       long rpm = requestRPM();
       char tmp[7];
-      sprintf(tmp, "%06d",rpm);
+      sprintf(tmp, "%06ld",rpm);
       response += ("rqr" + String(tmp)) + "\n";
       command = command.substring(3);
       communication_timeout_counter = 0;
