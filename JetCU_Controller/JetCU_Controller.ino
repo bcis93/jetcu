@@ -252,6 +252,7 @@ void emergencyStop(){
   fuelPump(0,0);
   setStarterMotorDutyCycle(0);
   setGlowPlugDutyCycle(0);
+  delay(600); //delay 600 ms to avoid fuel buildup
   burnerValve(0);
   fuelValve(0);
 }
