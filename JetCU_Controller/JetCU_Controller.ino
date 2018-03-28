@@ -114,7 +114,7 @@ ISR(TIMER0_COMPA_vect){
   static int fuel_pump_counter = 0;
   fuel_pump_counter++;
   communication_timeout_counter++;
-  if (fuel_pump_counter >= 500){
+  if (fuel_pump_counter >= 250){
     fuelPumpFlag = true;
     fuel_pump_counter = 0;
   }
@@ -203,6 +203,7 @@ String handle_command(String command){
       response += "end\n";
       communication_timeout_counter = 0;
       emergencyStop();
+      command = "";
     }
     else if (commandType == "RQT"){
       int temp = requestTemperature();
