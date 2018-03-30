@@ -58,7 +58,6 @@ void setup(){
   //set pins as outputs
   pinMode(STARTER_MOTOR_PIN, OUTPUT);
   pinMode(GLOW_PLUG_PIN, OUTPUT);
-  pinMode(TIMER_ONE_PIN, OUTPUT);
 
   init_interrupts();
 
