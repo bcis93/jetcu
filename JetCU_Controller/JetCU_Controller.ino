@@ -42,7 +42,8 @@ int starterMotor_dutyCycle = 0; //maybe add volatile
 #define GLOW_PLUG_COUNTER_MAX 19
 int glowPlug_dutyCycle = 0;
 
-//constants and variables for serial communication
+//constants and variables for communication
+#define FAST 1
 String incoming_command = "";
 
 //variable for fuel pump mode
@@ -51,9 +52,6 @@ volatile int pumpvalue1=0;
 volatile int pumpvalue2=0;
 bool fuelPumpFlag = false;
 
-//constants for testing
-//to be removed later
-#define TIMER_ONE_PIN 7
 
 void setup(){
   
@@ -72,6 +70,7 @@ void setup(){
 //  Wire.setClock(20000);
   I2c.begin();
   I2c.timeOut(100); //100 ms timeout
+  I2c.setSpeed(FAST); //sets to high speed I2C
 }
 
 void init_interrupts(){
