@@ -165,8 +165,8 @@ void loop() {
 //  else{
 
     if (Serial.available() > 0){
-    incoming_command += Serial.readString();
-    String response = handle_command();
+    incoming_command = Serial.readString();
+    String response = handle_command(incoming_command);
     Serial.println(response);
     }
   
@@ -178,37 +178,37 @@ void loop() {
 
 }
 
-String handle_command(){
+String handle_command(String command){
   //Serial.println("handle_command");
   // handle commands here
   String response = "";
-  if (incoming_command.length() > 1){
-    incoming_command.trim(); //removes extra whitespace before and after command
-    String commandType = incoming_command.substring(0,3);
+  while (command.length() > 1){
+    command.trim(); //removes extra whitespace before and after command
+    String commandType = command.substring(0,3);
     if (commandType == "SMD"){
-      int requestedDutyCycle = incoming_command.substring(3,5).toInt();
+      int requestedDutyCycle = command.substring(3,5).toInt();
       response += setStarterMotorDutyCycle(requestedDutyCycle) + "\n";
-      incoming_command = incoming_command.substring(5);
+      command = command.substring(5);
       communication_timeout_counter = 0;
     }
     else if (commandType == "GPD"){
-      int requestedDutyCycle = incoming_command.substring(3,5).toInt();
+      int requestedDutyCycle = command.substring(3,5).toInt();
       response += setGlowPlugDutyCycle(requestedDutyCycle) + "\n";
-      incoming_command = incoming_command.substring(5);
+      command = command.substring(5);
       communication_timeout_counter = 0;
     }
     else if (commandType == "END"){
       response += "end\n";
       communication_timeout_counter = 0;
       emergencyStop();
-      incoming_command = "";
+      command = "";
     }
     else if (commandType == "RQT"){
       int temp = requestTemperature();
       char tmp[5];
       sprintf(tmp, "%04d", temp);
       response += ("rqt" + String(tmp)) + "\n";
-      incoming_command = incoming_command.substring(3);
+      command = command.substring(3);
       communication_timeout_counter = 0;
     }
     else if (commandType == "RQR"){
@@ -216,31 +216,31 @@ String handle_command(){
       char tmp[7];
       sprintf(tmp, "%06ld",rpm);
       response += ("rqr" + String(tmp)) + "\n";
-      incoming_command = incoming_command.substring(3);
+      command = command.substring(3);
       communication_timeout_counter = 0;
     }
     else if (commandType == "FVP"){
-      int requestedPercent = incoming_command.substring(3,6).toInt();
+      int requestedPercent = command.substring(3,6).toInt();
       response += fuelValve(requestedPercent) + "\n";
-      incoming_command = incoming_command.substring(6);
+      command = command.substring(6);
       communication_timeout_counter = 0;
     }
     else if (commandType == "BVP"){
-      int requestedPercent = incoming_command.substring(3,6).toInt();
+      int requestedPercent = command.substring(3,6).toInt();
       response += burnerValve(requestedPercent) + "\n";
-      incoming_command = incoming_command.substring(6);
+      command = command.substring(6);
       communication_timeout_counter = 0;
     }
     else if (commandType == "FPM"){
-      int requestedPump1 = incoming_command.substring(3,6).toInt();
-      int requestedPump2 =  incoming_command.substring(7,10).toInt();
+      int requestedPump1 = command.substring(3,6).toInt();
+      int requestedPump2 =  command.substring(7,10).toInt();
       response += fuelPump(requestedPump1, requestedPump2) + "\n";
-      incoming_command = incoming_command.substring(10);
+      command = command.substring(10);
       communication_timeout_counter = 0;
     }
     else {
       response += "inv\n";
-      incoming_command = incoming_command.substring(1);
+      command = command.substring(1);
     }
   }
   return response;
