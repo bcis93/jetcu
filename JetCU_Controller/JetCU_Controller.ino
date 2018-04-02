@@ -295,7 +295,12 @@ long requestRPM(){
   long byte3 = I2c.receive();
   long rpm = 0;
   if (byte1+byte2+byte3==248){
-    rpm=5.025*byte1+1300*byte2-33.439;
+    if byte2==0{
+      rpm=0;
+    }
+    else{      
+    rpm=5.0474*byte1+1280*byte2;
+    }
   }
   //Serial.println(rpm);
   return rpm;
