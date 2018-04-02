@@ -42,7 +42,8 @@ int starterMotor_dutyCycle = 0; //maybe add volatile
 #define GLOW_PLUG_COUNTER_MAX 19
 int glowPlug_dutyCycle = 0;
 
-//constants and variables for serial communication
+//constants and variables for communication
+#define FAST 1
 String incoming_command = "";
 
 //variable for fuel pump mode
@@ -51,16 +52,12 @@ volatile int pumpvalue1=0;
 volatile int pumpvalue2=0;
 bool fuelPumpFlag = false;
 
-//constants for testing
-//to be removed later
-#define TIMER_ONE_PIN 7
 
 void setup(){
   
   //set pins as outputs
   pinMode(STARTER_MOTOR_PIN, OUTPUT);
   pinMode(GLOW_PLUG_PIN, OUTPUT);
-  pinMode(TIMER_ONE_PIN, OUTPUT);
 
   init_interrupts();
 
@@ -72,6 +69,7 @@ void setup(){
 //  Wire.setClock(20000);
   I2c.begin();
   I2c.timeOut(100); //100 ms timeout
+  I2c.setSpeed(FAST); //sets to high speed I2C
 }
 
 void init_interrupts(){
@@ -114,7 +112,7 @@ ISR(TIMER0_COMPA_vect){
   static int fuel_pump_counter = 0;
   fuel_pump_counter++;
   communication_timeout_counter++;
-  if (fuel_pump_counter >= 500){
+  if (fuel_pump_counter >= 250){
     fuelPumpFlag = true;
     fuel_pump_counter = 0;
   }
@@ -167,8 +165,8 @@ void loop() {
 //  else{
 
     if (Serial.available() > 0){
-    incoming_command = Serial.readString();
-    String response = handle_command(incoming_command);
+    incoming_command += Serial.readString();
+    String response = handle_command();
     Serial.println(response);
     }
   
@@ -180,36 +178,37 @@ void loop() {
 
 }
 
-String handle_command(String command){
+String handle_command(){
   //Serial.println("handle_command");
   // handle commands here
   String response = "";
-  while (command.length() > 1){
-    command.trim(); //removes extra whitespace before and after command
-    String commandType = command.substring(0,3);
+  if (incoming_command.length() > 1){
+    incoming_command.trim(); //removes extra whitespace before and after command
+    String commandType = incoming_command.substring(0,3);
     if (commandType == "SMD"){
-      int requestedDutyCycle = command.substring(3,5).toInt();
+      int requestedDutyCycle = incoming_command.substring(3,5).toInt();
       response += setStarterMotorDutyCycle(requestedDutyCycle) + "\n";
-      command = command.substring(5);
+      incoming_command = incoming_command.substring(5);
       communication_timeout_counter = 0;
     }
     else if (commandType == "GPD"){
-      int requestedDutyCycle = command.substring(3,5).toInt();
+      int requestedDutyCycle = incoming_command.substring(3,5).toInt();
       response += setGlowPlugDutyCycle(requestedDutyCycle) + "\n";
-      command = command.substring(5);
+      incoming_command = incoming_command.substring(5);
       communication_timeout_counter = 0;
     }
     else if (commandType == "END"){
       response += "end\n";
       communication_timeout_counter = 0;
       emergencyStop();
+      incoming_command = "";
     }
     else if (commandType == "RQT"){
       int temp = requestTemperature();
       char tmp[5];
       sprintf(tmp, "%04d", temp);
       response += ("rqt" + String(tmp)) + "\n";
-      command = command.substring(3);
+      incoming_command = incoming_command.substring(3);
       communication_timeout_counter = 0;
     }
     else if (commandType == "RQR"){
@@ -217,31 +216,31 @@ String handle_command(String command){
       char tmp[7];
       sprintf(tmp, "%06ld",rpm);
       response += ("rqr" + String(tmp)) + "\n";
-      command = command.substring(3);
+      incoming_command = incoming_command.substring(3);
       communication_timeout_counter = 0;
     }
     else if (commandType == "FVP"){
-      int requestedPercent = command.substring(3,6).toInt();
+      int requestedPercent = incoming_command.substring(3,6).toInt();
       response += fuelValve(requestedPercent) + "\n";
-      command = command.substring(6);
+      incoming_command = incoming_command.substring(6);
       communication_timeout_counter = 0;
     }
     else if (commandType == "BVP"){
-      int requestedPercent = command.substring(3,6).toInt();
+      int requestedPercent = incoming_command.substring(3,6).toInt();
       response += burnerValve(requestedPercent) + "\n";
-      command = command.substring(6);
+      incoming_command = incoming_command.substring(6);
       communication_timeout_counter = 0;
     }
     else if (commandType == "FPM"){
-      int requestedPump1 = command.substring(3,6).toInt();
-      int requestedPump2 =  command.substring(7,10).toInt();
+      int requestedPump1 = incoming_command.substring(3,6).toInt();
+      int requestedPump2 =  incoming_command.substring(7,10).toInt();
       response += fuelPump(requestedPump1, requestedPump2) + "\n";
-      command = command.substring(10);
+      incoming_command = incoming_command.substring(10);
       communication_timeout_counter = 0;
     }
     else {
       response += "inv\n";
-      command = command.substring(1);
+      incoming_command = incoming_command.substring(1);
     }
   }
   return response;
@@ -251,6 +250,7 @@ void emergencyStop(){
   fuelPump(0,0);
   setStarterMotorDutyCycle(0);
   setGlowPlugDutyCycle(0);
+  delay(600); //delay 600 ms to avoid fuel buildup
   burnerValve(0);
   fuelValve(0);
 }
