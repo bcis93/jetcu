@@ -35,7 +35,7 @@ int communication_timeout_counter = 0;
 //constants and variables for starter motor
 #define STARTER_MOTOR_PIN 6
 #define STARTER_MOTOR_COUNTER_MAX 19
-int starterMotor_dutyCycle = 0; //maybe add volatile
+int starterMotor_dutyCycle = 0;
 
 //constants and variables for glow plug
 #define GLOW_PLUG_PIN 5
@@ -46,30 +46,25 @@ int glowPlug_dutyCycle = 0;
 String incoming_command = "";
 
 //variable for fuel pump mode
-//int fuelPumpMode = 0;
 volatile int pumpvalue1=0;
 volatile int pumpvalue2=0;
 bool fuelPumpFlag = false;
-
-//constants for testing
-//to be removed later
-#define TIMER_ONE_PIN 7
+#define FUEL_PUMP_REFRESH_RATE 250 //fuel pump will refresh every 250 ms
 
 void setup(){
   
   //set pins as outputs
   pinMode(STARTER_MOTOR_PIN, OUTPUT);
   pinMode(GLOW_PLUG_PIN, OUTPUT);
-  pinMode(TIMER_ONE_PIN, OUTPUT);
 
+  //interrupts for PWM
   init_interrupts();
 
+  //serial communication
   Serial.begin(115200);
   Serial.setTimeout(10); //sets the timeout of the serial read to 10ms
 
-  //setup I2C communication
-//  Wire.begin();
-//  Wire.setClock(20000);
+  //I2C communication
   I2c.begin();
   I2c.timeOut(100); //100 ms timeout
 }
@@ -110,11 +105,16 @@ void init_interrupts(){
   sei();//allow interrupts
 }
 
+/*
+ * Timer0 ISR
+ * This function runs every 1ms
+ * 
+ */
 ISR(TIMER0_COMPA_vect){
   static int fuel_pump_counter = 0;
   fuel_pump_counter++;
   communication_timeout_counter++;
-  if (fuel_pump_counter >= 250){
+  if (fuel_pump_counter >= FUEL_PUMP_REFRESH_RATE){
     fuelPumpFlag = true;
     fuel_pump_counter = 0;
   }
@@ -129,7 +129,12 @@ ISR(TIMER0_COMPA_vect){
   }
 }
 
-ISR(TIMER1_COMPA_vect){//timer1 interrupt 532Hz
+/*
+ * Timer1 ISR
+ * This function runs 532 times per second.
+ * It outputs the PWM for the glow plug.
+ */
+ISR(TIMER1_COMPA_vect){
   static int counter = 0;
   if (counter < glowPlug_dutyCycle){
     digitalWrite(GLOW_PLUG_PIN, HIGH );
@@ -144,7 +149,12 @@ ISR(TIMER1_COMPA_vect){//timer1 interrupt 532Hz
   }
 }
   
-ISR(TIMER2_COMPA_vect){//timer2 interrupt 40kHz for starter motor
+/*
+ * Timer2 ISR
+ * This funtion runs 40k times per second
+ * It outputs the PWM for the starter motor.
+ */
+ISR(TIMER2_COMPA_vect){
     static int counter = 0;
     if (counter < starterMotor_dutyCycle){
       digitalWrite(STARTER_MOTOR_PIN, HIGH );
@@ -160,7 +170,6 @@ ISR(TIMER2_COMPA_vect){//timer2 interrupt 40kHz for starter motor
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
 //  if (emergencyStopFlag){
 //    //stop!!
 //  }
@@ -305,9 +314,6 @@ long requestRPM(){
 
 String burnerValve(int percent){
    //Turn on burner valve
-//  Wire.beginTransmission(ENGINE_ADDRESS);
-//  Wire.write(0x01);Wire.write(0x1f);Wire.write(percent);Wire.write(225-percent);
-//  Wire.endTransmission();
   uint8_t data[3] = {0x1f, percent, 225-percent};
   I2c.write(ENGINE_ADDRESS, ENGINE_ADDRESS, data, 3);
   return "bvp" + String(percent);
@@ -315,29 +321,10 @@ String burnerValve(int percent){
 
 String fuelValve(int percent){
   //Turn on fuel valve
-//  Wire.beginTransmission(ENGINE_ADDRESS);
-//  Wire.write(0x01);Wire.write(0x1e);Wire.write(percent);Wire.write(226-percent);
-//  Wire.endTransmission();
   uint8_t data[3] = {0x1e, percent, 226-percent};
   I2c.write(ENGINE_ADDRESS, ENGINE_ADDRESS, data, 3);
   return "fvp" + String(percent);
 }
-
-//String fuelPump(int input){
-//  if (input == 0){ //turn off pump
-//    fuelPumpMode = 0;
-//    return "fpm0";
-//  }
-//  else if (input == 1){ //turn on phase 1
-//    fuelPumpMode = 1;
-//    return "fpm1";
-//  }
-//  else if (input == 2){ //turn on phase 2
-//    fuelPumpMode = 2;
-//    return "fpm2";
-//  }
-//  else return "inv";
-//}
 
 String fuelPump(int input1, int input2){
   pumpvalue1=input1;
@@ -345,49 +332,11 @@ String fuelPump(int input1, int input2){
   return "fpm" + String(input1) + "," + String(input2);
 }
 
-//void fuelPumpControl(){
-//  //Serial.println("fuelPumpControl");
-//  if (fuelPumpMode == 1){
-//    Wire.beginTransmission(PUMP_ADDRESS);
-//    Wire.write(0x01);Wire.write(0x1c);Wire.write(0xA0);Wire.write(0x00);Wire.write(0x10);Wire.write(0x34);Wire.write(0x07);
-//    Wire.endTransmission();
-//  }
-//  else if (fuelPumpMode == 2){
-//    Wire.beginTransmission(PUMP_ADDRESS);
-//    Wire.write(0x01);Wire.write(0x1c);Wire.write(0xA0);Wire.write(0x00);Wire.write(0x15);Wire.write(0x2F);Wire.write(0x07);
-//    Wire.endTransmission();
-//  }
-//  else{
-//    Wire.beginTransmission(PUMP_ADDRESS);
-//    Wire.write(0x01);Wire.write(0x1c);Wire.write(0x00);Wire.write(0x00);Wire.write(0x00);Wire.write(0xe4);Wire.write(0x07);
-//    Wire.endTransmission();
-//  }
-//}
-
 void fuelPumpControl(){
   //Serial.println("fuelPumpControl");  
   byte pumpByte1 = pumpvalue1;
   byte pumpByte2 = pumpvalue2;
-  //Serial.println(pumpByte1);
 
   uint8_t data[5] = {0x1c, pumpByte1, 0x00, pumpByte2, 256 - ((0x1c+pumpByte1+pumpByte2) % 256)};
-  //delay(10);
   I2c.write(PUMP_ADDRESS, 0x01, data, 5);
-  
-//  if (pumpvalue2<255){
-////    Wire.beginTransmission(PUMP_ADDRESS);
-////    Wire.write(0x01);Wire.write(0x1c);Wire.write(pumpByte1);Wire.write(0x00);Wire.write(pumpByte2);Wire.write(228-pumpvalue1-pumpByte2);Wire.write(0x07);
-////    Wire.endTransmission();
-//
-////    uint8_t data[6] = {0x1c, pumpByte1, 0x00, pumpByte2, 228-pumpByte1-pumpByte2, 0x07};
-////    I2c.write(PUMP_ADDRESS, 0x01, data, 6);
-//  }
-//  else{
-////    Wire.beginTransmission(PUMP_ADDRESS);
-////    Wire.write(0x01);Wire.write(0x1c);Wire.write(pumpByte1);Wire.write(0x00);Wire.write(pumpByte2);Wire.write(484-pumpvalue1-pumpByte2);Wire.write(0x07);
-////    Wire.endTransmission();
-//      
-////    uint8_t data[6] = {0x1c, pumpByte1, 0x00, pumpByte2, 484-pumpByte1-pumpByte2, 0x07};
-////    I2c.write(PUMP_ADDRESS, 0x01, data, 6);
-//  }
 }
