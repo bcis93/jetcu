@@ -10,27 +10,16 @@
  * 
  */
 
-
-
-
-//#include <Wire.h>
 #include <I2C.h>
 #define ENGINE_ADDRESS 0x01
 #define PUMP_ADDRESS 0x02
 
 
-//timer setup for timer0, timer1, and timer2.
-//For arduino uno or any board with ATMEL 328/168.. diecimila, duemilanove, lilypad, nano, mini...
-
-//this code will enable two arduino timer interrupts.
-//timer0 will not be changed
-//timer1 will interrupt at 532Hz
-//timer2 will interrupt at 40kHz
-
 //constants and variables for safety checks
 bool emergencyStopFlag = false;
 #define COMMUNICATION_TIMEOUT 500 //in milliseconds
 int communication_timeout_counter = 0;
+/********* NOTE: communication timeout is not actually implemented yet *********/
 
 //constants and variables for starter motor
 #define STARTER_MOTOR_PIN 6
@@ -49,7 +38,7 @@ String incoming_command = "";
 volatile int pumpvalue1=0;
 volatile int pumpvalue2=0;
 bool fuelPumpFlag = false;
-#define FUEL_PUMP_REFRESH_RATE 250 //fuel pump will refresh every 250 ms
+#define FUEL_PUMP_REFRESH_RATE 250 //fuel pump will be updated every 250 ms
 
 void setup(){
   
@@ -57,7 +46,7 @@ void setup(){
   pinMode(STARTER_MOTOR_PIN, OUTPUT);
   pinMode(GLOW_PLUG_PIN, OUTPUT);
 
-  //interrupts for PWM
+  //intialize interrupts for PWM
   init_interrupts();
 
   //serial communication
@@ -69,6 +58,13 @@ void setup(){
   I2c.timeOut(100); //100 ms timeout
 }
 
+
+/*
+ * this code will enable two arduino timer interrupts.
+ * timer0 will not be changed
+ * timer1 will interrupt at 532Hz
+ * timer2 will interrupt at 40kHz
+ */
 void init_interrupts(){
   cli();//stop interrupts
 
@@ -101,7 +97,6 @@ void init_interrupts(){
   // enable timer compare interrupt
   TIMSK2 |= (1 << OCIE2A);
 
-
   sei();//allow interrupts
 }
 
@@ -115,12 +110,14 @@ ISR(TIMER0_COMPA_vect){
   fuel_pump_counter++;
   communication_timeout_counter++;
   if (fuel_pump_counter >= FUEL_PUMP_REFRESH_RATE){
-    fuelPumpFlag = true;
+    fuelPumpFlag = true; //sets a flag that will be used in the main loop
     fuel_pump_counter = 0;
   }
   else{
     fuelPumpFlag = false;
   }
+  
+  /********* NOTE: communication timeout is not actually implemented yet *********/
   if (communication_timeout_counter > COMMUNICATION_TIMEOUT){
     emergencyStopFlag = true;
   }
@@ -170,18 +167,19 @@ ISR(TIMER2_COMPA_vect){
 }
 
 void loop() {
+  /********* NOTE: Add a check here, similar to this one, to implement the communication timeout *********/
 //  if (emergencyStopFlag){
 //    //stop!!
 //  }
 //  else{
 
-    if (Serial.available() > 0){
-    incoming_command = Serial.readString();
-    String response = handle_command(incoming_command);
-    Serial.println(response);
+    if (Serial.available() > 0){ //if there is a command on the serial buffer
+    incoming_command = Serial.readString(); //read incoming string
+    String response = handle_command(incoming_command); //handle the incoming command(s)
+    Serial.println(response); //print a response
     }
   
-    if (fuelPumpFlag){
+    if (fuelPumpFlag){ //if the fuel pump flag is set, update the fuel pump
       fuelPumpControl();
     }
     
@@ -189,32 +187,40 @@ void loop() {
 
 }
 
+/*
+ * This funtion handles the incoming command buffer.
+ * It will go through all the commands in the buffer
+ * and handle each one, one at a time.
+ */
 String handle_command(String command){
-  //Serial.println("handle_command");
-  // handle commands here
-  String response = "";
-  while (command.length() > 1){
+  String response = ""; //start with an empty response
+  while (command.length() > 1){ //continues until all commands have been handled
+    
     command.trim(); //removes extra whitespace before and after command
-    String commandType = command.substring(0,3);
-    if (commandType == "SMD"){
+    String commandType = command.substring(0,3); //the first 3 characters will be the command type (ex. RQR, SMD, etc)
+    
+    if (commandType == "SMD"){ //Starter motor duty cycle
       int requestedDutyCycle = command.substring(3,5).toInt();
       response += setStarterMotorDutyCycle(requestedDutyCycle) + "\n";
       command = command.substring(5);
       communication_timeout_counter = 0;
     }
-    else if (commandType == "GPD"){
+    
+    else if (commandType == "GPD"){ //Glow plug duty cycle
       int requestedDutyCycle = command.substring(3,5).toInt();
       response += setGlowPlugDutyCycle(requestedDutyCycle) + "\n";
       command = command.substring(5);
       communication_timeout_counter = 0;
     }
-    else if (commandType == "END"){
+    
+    else if (commandType == "END"){ //Shutoff
       response += "end\n";
       communication_timeout_counter = 0;
       emergencyStop();
       command = "";
     }
-    else if (commandType == "RQT"){
+    
+    else if (commandType == "RQT"){ //Request temperature
       int temp = requestTemperature();
       char tmp[5];
       sprintf(tmp, "%04d", temp);
@@ -222,7 +228,8 @@ String handle_command(String command){
       command = command.substring(3);
       communication_timeout_counter = 0;
     }
-    else if (commandType == "RQR"){
+    
+    else if (commandType == "RQR"){ //Request RPM
       long rpm = requestRPM();
       char tmp[7];
       sprintf(tmp, "%06ld",rpm);
@@ -230,33 +237,41 @@ String handle_command(String command){
       command = command.substring(3);
       communication_timeout_counter = 0;
     }
-    else if (commandType == "FVP"){
+    
+    else if (commandType == "FVP"){ //Fuel valve percent
       int requestedPercent = command.substring(3,6).toInt();
       response += fuelValve(requestedPercent) + "\n";
       command = command.substring(6);
       communication_timeout_counter = 0;
     }
-    else if (commandType == "BVP"){
+    
+    else if (commandType == "BVP"){ //Burner valve percent
       int requestedPercent = command.substring(3,6).toInt();
       response += burnerValve(requestedPercent) + "\n";
       command = command.substring(6);
       communication_timeout_counter = 0;
     }
-    else if (commandType == "FPM"){
+
+    else if (commandType == "FPM"){ //Fuel pump mode
       int requestedPump1 = command.substring(3,6).toInt();
       int requestedPump2 =  command.substring(7,10).toInt();
       response += fuelPump(requestedPump1, requestedPump2) + "\n";
       command = command.substring(10);
       communication_timeout_counter = 0;
     }
-    else {
+    
+    else { //invalid command
       response += "inv\n";
       command = command.substring(1);
     }
+    
   }
   return response;
 }
 
+/*
+ * This function turns off everything on the engine
+ */
 void emergencyStop(){
   fuelPump(0,0);
   setStarterMotorDutyCycle(0);
@@ -308,7 +323,6 @@ long requestRPM(){
   if (byte1+byte2+byte3==248){
     rpm=5.025*byte1+1300*byte2-33.439;
   }
-  //Serial.println(rpm);
   return rpm;
 }
 
