@@ -327,7 +327,7 @@ int requestTemperature(){
   int byte1 = I2c.receive();
   int byte2 = I2c.receive();
   int byte3 = I2c.receive();
-  int temperature = 0;
+  int temperature = -1;
   if (byte1+byte2+byte3==245){
     temperature=byte1*1.0193+261*byte2-30.451; //Note: this integer multiplication may be slowing down the processor
   }
@@ -340,7 +340,7 @@ long requestRPM(){
   long byte1 = I2c.receive();
   long byte2 = I2c.receive();
   long byte3 = I2c.receive();
-  long rpm = 0;
+  long rpm = -1;
   if (byte1+byte2+byte3==248){
     rpm=5.025*byte1+1300*byte2-33.439; //Note: this long multiplication may be slowing down the processor
   }
