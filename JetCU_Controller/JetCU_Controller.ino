@@ -40,6 +40,10 @@ volatile int pumpvalue2=0;
 bool fuelPumpFlag = false;
 #define FUEL_PUMP_REFRESH_RATE 250 //fuel pump will be updated every 250 ms
 
+//constants for valves
+#define FUEL_VALVE_REGISTER 30
+#define BURNER_VALVE_REGISTER 31
+
 void setup(){
   
   //set pins as outputs
@@ -281,6 +285,10 @@ void emergencyStop(){
   fuelValve(0);
 }
 
+/*
+ * This function sets a global variable that is used
+ * in the starter motor ISR to create different duty cycles
+ */
 String setStarterMotorDutyCycle(int dutyCycle){
   if (dutyCycle >= 0 && dutyCycle <= STARTER_MOTOR_COUNTER_MAX){
     starterMotor_dutyCycle = dutyCycle;
@@ -290,6 +298,10 @@ String setStarterMotorDutyCycle(int dutyCycle){
   else return "inv";
 }
 
+/*
+ * This function sets a global variable that is used
+ * in the glow plug ISR to create different duty cycles
+ */
 String setGlowPlugDutyCycle(int dutyCycle){
   if (dutyCycle >= 0 && dutyCycle <= GLOW_PLUG_COUNTER_MAX){
     glowPlug_dutyCycle = dutyCycle;
@@ -308,7 +320,7 @@ int requestTemperature(){
   int byte3 = I2c.receive();
   int temperature = 0;
   if (byte1+byte2+byte3==245){
-    temperature=byte1*1.0193+261*byte2-30.451;
+    temperature=byte1*1.0193+261*byte2-30.451; //Note: this integer multiplication may be slowing down the processor
   }
   return temperature;
 }
@@ -321,22 +333,22 @@ long requestRPM(){
   long byte3 = I2c.receive();
   long rpm = 0;
   if (byte1+byte2+byte3==248){
-    rpm=5.025*byte1+1300*byte2-33.439;
+    rpm=5.025*byte1+1300*byte2-33.439; //Note: this long multiplication may be slowing down the processor
   }
   return rpm;
 }
 
 String burnerValve(int percent){
    //Turn on burner valve
-  uint8_t data[3] = {0x1f, percent, 225-percent};
-  I2c.write(ENGINE_ADDRESS, ENGINE_ADDRESS, data, 3);
+  uint8_t data[3] = {BURNER_VALVE_REGISTER, percent, 225-percent};
+  I2c.write(ENGINE_ADDRESS, 0x01, data, 3);
   return "bvp" + String(percent);
 }
 
 String fuelValve(int percent){
   //Turn on fuel valve
-  uint8_t data[3] = {0x1e, percent, 226-percent};
-  I2c.write(ENGINE_ADDRESS, ENGINE_ADDRESS, data, 3);
+  uint8_t data[3] = {FUEL_VALVE_REGISTER, percent, 226-percent};
+  I2c.write(ENGINE_ADDRESS, 0x01, data, 3);
   return "fvp" + String(percent);
 }
 
@@ -346,8 +358,7 @@ String fuelPump(int input1, int input2){
   return "fpm" + String(input1) + "," + String(input2);
 }
 
-void fuelPumpControl(){
-  //Serial.println("fuelPumpControl");  
+void fuelPumpControl(){ 
   byte pumpByte1 = pumpvalue1;
   byte pumpByte2 = pumpvalue2;
 
