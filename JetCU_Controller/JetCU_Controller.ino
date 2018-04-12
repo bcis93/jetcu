@@ -342,7 +342,12 @@ long requestRPM(){
   long byte3 = I2c.receive();
   long rpm = -1;
   if (byte1+byte2+byte3==248){
-    rpm=5.025*byte1+1300*byte2-33.439; //Note: this long multiplication may be slowing down the processor
+    if (byte2==0){//Special case for 0 RPM (otherwise it doesn't fit the trendline)
+      rpm=0;
+    }
+    else{
+    rpm=5.0474*byte1+1280*byte2;//Note: this long multiplication may be slowing down the processor
+    }
   }
   return rpm;
 }
