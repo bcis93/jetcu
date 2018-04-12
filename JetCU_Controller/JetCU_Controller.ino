@@ -11,8 +11,13 @@
  */
 
 #include <I2C.h>
-#define ENGINE_ADDRESS 0x01
-#define PUMP_ADDRESS 0x02
+#define ENGINE_ADDRESS 1
+#define PUMP_ADDRESS 2
+#define RPM_REGISTER 8
+#define TEMPERATURE_REGISTER 11
+#define FUEL_VALVE_REGISTER 30
+#define BURNER_VALVE_REGISTER 31
+#define IDENTIFY_REGISTER 21
 
 
 //constants and variables for safety checks
@@ -40,9 +45,6 @@ volatile int pumpvalue2=0;
 bool fuelPumpFlag = false;
 #define FUEL_PUMP_REFRESH_RATE 250 //fuel pump will be updated every 250 ms
 
-//constants for valves
-#define FUEL_VALVE_REGISTER 30
-#define BURNER_VALVE_REGISTER 31
 
 void setup(){
   
@@ -241,6 +243,14 @@ String handle_command(String command){
       command = command.substring(3);
       communication_timeout_counter = 0;
     }
+
+    else if (commandType== "RQE"){
+      String identifier=identifyengine();
+      response += (identifier + "\n");
+      command = command.substring(3);
+      communication_timeout_counter = 0;
+
+    }
     
     else if (commandType == "FVP"){ //Fuel valve percent
       int requestedPercent = command.substring(3,6).toInt();
@@ -311,10 +321,9 @@ String setGlowPlugDutyCycle(int dutyCycle){
   else return "inv";
 }
 
-
 int requestTemperature(){
    //Prompt temperature
-  I2c.read(ENGINE_ADDRESS, 0x0b, 3);
+  I2c.read(ENGINE_ADDRESS, TEMPERATURE_REGISTER, 3); //read 3 bytes from the temperature register on the engine
   int byte1 = I2c.receive();
   int byte2 = I2c.receive();
   int byte3 = I2c.receive();
@@ -327,7 +336,7 @@ int requestTemperature(){
 
 long requestRPM(){
   //Prompt RPM
-  I2c.read(ENGINE_ADDRESS, 0x08, 3);
+  I2c.read(ENGINE_ADDRESS, RPM_REGISTER, 3); //read 3 bytes from the RPM register on the engine
   long byte1 = I2c.receive();
   long byte2 = I2c.receive();
   long byte3 = I2c.receive();
@@ -341,14 +350,14 @@ long requestRPM(){
 String burnerValve(int percent){
    //Turn on burner valve
   uint8_t data[3] = {BURNER_VALVE_REGISTER, percent, 225-percent};
-  I2c.write(ENGINE_ADDRESS, 0x01, data, 3);
+  I2c.write(ENGINE_ADDRESS, 0x01, data, 3); //write the 3 bytes in data to the engine address
   return "bvp" + String(percent);
 }
 
 String fuelValve(int percent){
   //Turn on fuel valve
   uint8_t data[3] = {FUEL_VALVE_REGISTER, percent, 226-percent};
-  I2c.write(ENGINE_ADDRESS, 0x01, data, 3);
+  I2c.write(ENGINE_ADDRESS, 0x01, data, 3); //write the 3 bytes in data to the engine address
   return "fvp" + String(percent);
 }
 
@@ -363,5 +372,17 @@ void fuelPumpControl(){
   byte pumpByte2 = pumpvalue2;
 
   uint8_t data[5] = {0x1c, pumpByte1, 0x00, pumpByte2, 256 - ((0x1c+pumpByte1+pumpByte2) % 256)};
-  I2c.write(PUMP_ADDRESS, 0x01, data, 5);
+  I2c.write(PUMP_ADDRESS, 0x01, data, 5); //write the 5 bytes in data to the pump address
+}
+
+String identifyengine(){
+  I2c.read(ENGINE_ADDRESS, IDENTIFY_REGISTER, 6); //read 6 bytes from identify register on engine
+  int byte1 = I2c.receive();
+  int byte2 = I2c.receive();
+  int byte3 = I2c.receive();
+  int byte4 = I2c.receive();
+  int byte5 = I2c.receive();
+  int byte6 = I2c.receive();
+  return ("rqe"+String(byte1)+","+String(byte2)+","+String(byte3)+","+String(byte4)+","+String(byte5)+","+String(byte6));
+   
 }
