@@ -555,7 +555,7 @@ int requestTemperature(){
 
   int byte3 = I2c.receive();
 
-  int temperature = 0;
+  int temperature = -1;
 
   if (byte1+byte2+byte3==245){
 
@@ -581,7 +581,7 @@ long requestRPM(){
 
   long byte3 = I2c.receive();
 
-  long rpm = 0;
+  long rpm = -1;
 
   if (byte1+byte2+byte3==248){
 
