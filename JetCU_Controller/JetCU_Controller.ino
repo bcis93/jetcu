@@ -244,7 +244,7 @@ String handle_command(String command){
       communication_timeout_counter = 0;
     }
 
-    else if (commandType== "RQE"){
+    else if (commandType== "RQE"){  //Request Engine Identifier
       String identifier=identifyengine();
       response += (identifier + "\n");
       command = command.substring(3);
@@ -327,7 +327,7 @@ int requestTemperature(){
   int byte1 = I2c.receive();
   int byte2 = I2c.receive();
   int byte3 = I2c.receive();
-  int temperature = -1;
+  int temperature = -1; //will return -1 if the checksum does not match
   if (byte1+byte2+byte3==245){
     temperature=byte1*1.0193+261*byte2-30.451; //Note: this integer multiplication may be slowing down the processor
   }
@@ -340,7 +340,7 @@ long requestRPM(){
   long byte1 = I2c.receive();
   long byte2 = I2c.receive();
   long byte3 = I2c.receive();
-  long rpm = -1;
+  long rpm = -1; //will return -1 if the checksum does not match
   if (byte1+byte2+byte3==248){
     if (byte2==0){//Special case for 0 RPM (otherwise it doesn't fit the trendline)
       rpm=0;
@@ -376,7 +376,7 @@ void fuelPumpControl(){
   byte pumpByte1 = pumpvalue1;
   byte pumpByte2 = pumpvalue2;
 
-  uint8_t data[5] = {0x1c, pumpByte1, 0x00, pumpByte2, 256 - ((0x1c+pumpByte1+pumpByte2) % 256)};
+  uint8_t data[5] = {0x1c, pumpByte1, 0x00, pumpByte2, 256 - ((0x1c+pumpByte1+pumpByte2) % 256)}; //the mod operator may be slowing down the processor
   I2c.write(PUMP_ADDRESS, 0x01, data, 5); //write the 5 bytes in data to the pump address
 }
 
